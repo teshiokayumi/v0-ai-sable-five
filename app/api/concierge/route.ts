@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
       ) as Promise<CourseSpot[]>,
     ])
 
-    // 3) 多段検索
+    // 3) 多段検索（優先順位に courses 検索を組み込む）
     const norm = (s: string) => (s || "").toLowerCase().trim()
     const stripNoise = (s: string) =>
       (s || "")
@@ -117,11 +117,18 @@ export async function POST(req: NextRequest) {
 
     const allSpots = spots as Spot[]
 
-    // 優先順位: 1) 完全一致 2) 部分一致（名前）3) 部分一致（住所）4) 部分一致（由緒/特徴）
+    // 優先順位: 1) shrine_name 完全一致 2) shrine_name 部分一致 3) courses 部分一致 4) address 部分一致 5) other_benefits 部分一致
     const byExactName = allSpots.filter((s) => norm(s.shrine_name || "") === q)
     const byPartialName = allSpots.filter((s) => q && norm(s.shrine_name || "").includes(q))
     const byAddress = allSpots.filter((s) => q && norm(s.address || "").includes(q))
     const byBenefits = allSpots.filter((s) => q && norm(s.other_benefits || "").includes(q))
+
+    // courses の部分一致（ランドマーク系を優先）
+    const courseHits = (courses as Course[]).filter(
+      (c) =>
+        q &&
+        [c.name || "", c.description || "", c.theme || ""].some((v) => norm(v).includes(q)),
+    )
 
     const seen = new Set<string>()
     const pushUnique = (arr: Spot[], spot: Spot) => {
@@ -133,28 +140,118 @@ export async function POST(req: NextRequest) {
       return arr
     }
 
-    const candidates: Spot[] = []
-    byExactName.forEach((s) => pushUnique(candidates, s))
-    byPartialName.forEach((s) => pushUnique(candidates, s))
-    byAddress.forEach((s) => pushUnique(candidates, s))
-    byBenefits.forEach((s) => pushUnique(candidates, s))
+    // 優先順位に応じた分岐
+    // 3-1) shrine_name（完全一致・部分一致）
+    const nameCandidates: Spot[] = []
+    byExactName.forEach((s) => pushUnique(nameCandidates, s))
+    byPartialName.forEach((s) => pushUnique(nameCandidates, s))
 
-    if (candidates.length === 0) {
-      const message = "該当する神社は見つかりませんでした。キーワードを変えてお試しください。"
+    if (nameCandidates.length > 0) {
+      // 神社候補に対するコース抽出
+      const plans = nameCandidates.flatMap((spot) => {
+        const shrineName = spot.shrine_name || ""
+        const spotKey = (spot.spotid || spot.spotID || "").toString()
+        const relCourseIds = courseSpots
+          .filter((cs) => (cs.spot_id || cs.spotid || "") === spotKey)
+          .map((cs) => (cs.course_id || cs.courseId || "").toString())
+        return courses
+          .filter((c) => relCourseIds.includes((c.course_id || c.courseId || "").toString()))
+          .map((c) => ({
+            course_id: c.course_id || c.courseId || "",
+            name: c.name || "",
+            description: c.description || "",
+            theme: c.theme || "",
+            shrine_name: shrineName,
+          }))
+      })
+
+      const topShrineName = nameCandidates[0]?.shrine_name || ""
+      let message: string
+      if (nameCandidates.length > 1) {
+        const list = nameCandidates
+          .slice(0, 10)
+          .map((c) => `・${c.shrine_name || "名称不明"}${c.address ? `（${c.address}）` : ""}`)
+          .join("\n")
+        message = `いくつか候補がございます。\n${list}`
+      } else {
+        const related = plans.filter((p) => p.shrine_name === topShrineName)
+        if (related.length === 0) {
+          message = `「${topShrineName}」に対応するコースは未登録です。近隣スポット名で再検索してみてください。`
+        } else if (related.length === 1) {
+          const p = related[0]
+          message = `「${topShrineName}」に近いおすすめコースは『${p.name}』です。${p.description || ""}`
+        } else {
+          message = `「${topShrineName}」の近くには、いくつかプランがございます。\n` +
+            related.map((p) => `・『${p.name}』— ${p.description || "説明準備中"}`).join("\n")
+        }
+      }
 
       let finalMessage = message
       try {
         const apiKey = process.env.GEMINI_API_KEY
-        if (apiKey) {
-          finalMessage = await refineWithGemini(apiKey, message, userQuery)
-        }
+        if (apiKey) finalMessage = await refineWithGemini(apiKey, message, userQuery)
       } catch {}
 
-      return NextResponse.json({ ok: true, message: finalMessage, shrine_name: null, plans: [] })
+      return NextResponse.json({ ok: true, message: finalMessage, shrine_name: topShrineName || null, plans })
     }
 
-    // 4) コース候補の抽出（複数神社に対応）
-    const plans = candidates.flatMap((spot) => {
+    // 3-2) courses（ランドマーク系）
+    if (courseHits.length > 0) {
+      const plans = courseHits.map((c) => ({ name: c.name || "", description: c.description || "", theme: c.theme || "" }))
+
+      // コースに含まれる神社名の列挙
+      const courseIdSet = new Set(
+        courseHits.map((c) => (c.course_id || c.courseId || "").toString())
+      )
+      const spotIdSet = new Set(
+        (courseSpots as CourseSpot[])
+          .filter((cs) => courseIdSet.has((cs.course_id || cs.courseId || "").toString()))
+          .map((cs) => (cs.spot_id || cs.spotid || "").toString())
+      )
+      const relatedShrines = (allSpots as Spot[])
+        .filter((s) => spotIdSet.has((s.spotid || s.spotID || "").toString()))
+        .map((s) => s.shrine_name || "")
+        .filter(Boolean)
+
+      const uniqueShrines: string[] = Array.from(new Set(relatedShrines))
+      const topShrineName = uniqueShrines[0] || null
+
+      let message: string
+      if (courseHits.length === 1) {
+        const c = courseHits[0]
+        message = `該当するコースは『${c.name || "名称未設定"}』です。${c.description || ""}`
+      } else {
+        const list = courseHits
+          .slice(0, 10)
+          .map((c) => `・『${c.name || "名称未設定"}』— ${c.description || "説明準備中"}`)
+          .join("\n")
+        message = `いくつか候補のコースがございます。\n${list}`
+      }
+
+      if (uniqueShrines.length > 0) {
+        message += `\n含まれる神社：${uniqueShrines.join("、")}`
+      }
+
+      let finalMessage = message
+      try {
+        const apiKey = process.env.GEMINI_API_KEY
+        if (apiKey) finalMessage = await refineWithGemini(apiKey, message, userQuery)
+      } catch {}
+
+      return NextResponse.json({ ok: true, message: finalMessage, shrine_name: topShrineName, plans })
+    }
+
+    // 3-3) address / other_benefits
+    const tailCandidates: Spot[] = []
+    byAddress.forEach((s) => pushUnique(tailCandidates, s))
+    byBenefits.forEach((s) => pushUnique(tailCandidates, s))
+
+    if (tailCandidates.length === 0) {
+      const message = "該当する神社やコースは見つかりませんでした。"
+      return NextResponse.json({ ok: true, message, shrine_name: null, plans: [] })
+    }
+
+    const tailPlans = tailCandidates.flatMap((spot) => {
       const shrineName = spot.shrine_name || ""
       const spotKey = (spot.spotid || spot.spotID || "").toString()
       const relCourseIds = courseSpots
@@ -171,44 +268,34 @@ export async function POST(req: NextRequest) {
         }))
     })
 
-    // 5) 応答メッセージ生成
-    const topShrineName = candidates[0]?.shrine_name || ""
-    let message: string
-
-    if (candidates.length > 1) {
-      const list = candidates
+    const topTailShrine = tailCandidates[0]?.shrine_name || ""
+    let tailMessage: string
+    if (tailCandidates.length > 1) {
+      const list = tailCandidates
         .slice(0, 10)
         .map((c) => `・${c.shrine_name || "名称不明"}${c.address ? `（${c.address}）` : ""}`)
         .join("\n")
-      message = `いくつか候補がございます。\n${list}`
+      tailMessage = `いくつか候補がございます。\n${list}`
     } else {
-      const related = plans.filter((p) => p.shrine_name === topShrineName)
+      const related = tailPlans.filter((p) => p.shrine_name === topTailShrine)
       if (related.length === 0) {
-        message = `「${topShrineName}」に対応するコースは未登録です。近隣スポット名で再検索してみてください。`
+        tailMessage = `「${topTailShrine}」に対応するコースは未登録です。近隣スポット名で再検索してみてください。`
       } else if (related.length === 1) {
         const p = related[0]
-        message = `「${topShrineName}」に近いおすすめコースは『${p.name}』です。${p.description || ""}`
+        tailMessage = `「${topTailShrine}」に近いおすすめコースは『${p.name}』です。${p.description || ""}`
       } else {
-        message = `「${topShrineName}」の近くには、いくつかプランがございます。\n` +
+        tailMessage = `「${topTailShrine}」の近くには、いくつかプランがございます。\n` +
           related.map((p) => `・『${p.name}』— ${p.description || "説明準備中"}`).join("\n")
       }
     }
 
-    // 6) 可能ならLLMで言い回しを整える（失敗しても握りつぶす）
-    let finalMessage = message
+    let finalTailMessage = tailMessage
     try {
       const apiKey = process.env.GEMINI_API_KEY
-      if (apiKey) {
-        finalMessage = await refineWithGemini(apiKey, message, userQuery)
-      }
+      if (apiKey) finalTailMessage = await refineWithGemini(apiKey, tailMessage, userQuery)
     } catch {}
 
-    return NextResponse.json({
-      ok: true,
-      message: finalMessage,
-      shrine_name: topShrineName || null,
-      plans,
-    })
+    return NextResponse.json({ ok: true, message: finalTailMessage, shrine_name: topTailShrine || null, plans: tailPlans })
   } catch (err: any) {
     // 7) どんな例外でも"沈黙させない"
     console.error("[concierge] fatal:", err?.message || err)
