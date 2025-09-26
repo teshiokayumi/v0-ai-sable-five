@@ -93,15 +93,16 @@ export async function POST(req: NextRequest) {
   try {
     const [spots, courses, courseSpots] = await Promise.all([
       fetchCSV(
-        "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/shrines%20-%20spot-f1YwPxEbFHsLAyI3T1rupbNUM6pr3I.csv",
+        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/gviz/tq?tqx=out:csv&sheet=spot"
       ) as Promise<Spot[]>,
       fetchCSV(
-        "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/shrines%20-%20courses-h2iZmLoTHDWZ8VBu3O7IxHKhboDin6.csv",
+        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/gviz/tq?tqx=out:csv&sheet=courses"
       ) as Promise<Course[]>,
       fetchCSV(
-        "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/shrines%20-%20course_spots-8opDgc9DP48nrsaWyGukc7HGQmNPL8.csv",
+        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/gviz/tq?tqx=out:csv&sheet=course_spots"
       ) as Promise<CourseSpot[]>,
     ])
+    
 
     // 3) 多段検索（優先順位に courses 検索を組み込む）
     const norm = (s: string) => (s || "").toLowerCase().trim()
