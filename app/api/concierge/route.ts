@@ -93,15 +93,16 @@ export async function POST(req: NextRequest) {
   try {
     const [spots, courses, courseSpots] = await Promise.all([
       fetchCSV(
-        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/gviz/tq?tqx=out:csv&sheet=spot"
+        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/export?format=csv&gid=0"
       ) as Promise<Spot[]>,
       fetchCSV(
-        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/gviz/tq?tqx=out:csv&sheet=courses"
+        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/export?format=csv&gid=405050802"
       ) as Promise<Course[]>,
       fetchCSV(
-        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/gviz/tq?tqx=out:csv&sheet=course_spots"
+        "https://docs.google.com/spreadsheets/d/1MQzEv6M9_sxCZ3giqSPYCCTQH_IKx27-LOOeiapUQ3E/export?format=csv&gid=1269897053"
       ) as Promise<CourseSpot[]>,
     ])
+    
     
 
     // 3) 多段検索（優先順位に courses 検索を組み込む）
