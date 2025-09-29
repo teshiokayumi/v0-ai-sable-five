@@ -78,7 +78,15 @@ export default function ConciergePage() {
         // ウェルカムメッセージを追加
         const welcomeMessage: Message = {
           id: 1,
-          text: "福岡は櫛田神社を起点に菅原道真公をご祭神とした神社や縁安命と言う古い神様を祀る神社、海運、学問の神様など、実に豊かな神社が街の中に祀られています。\n\nあなたの行きたいエリアの神社、観光地近くの神社など、どんな神社をめぐりたいか、お伝えください。",
+          text: `以下のプランからお選びください：
+\n- 大濠公園から西公園へ、へし切長谷部の御朱印をもらうツアー
+- 福岡市内の有名神社をめぐるツアー
+- 西新商店街から紅葉神社をめぐるツアー
+- 能古島で自然を満喫
+- 博多千年門から櫛田神社をめぐるツアー
+- 川端商店街から櫛田神社を通りキャナルシティの噴水ショーへ
+- 志賀島でヒーリング体験
+- 天神周辺を回遊`,
           isUser: false,
           timestamp: new Date(),
         }
@@ -154,7 +162,7 @@ export default function ConciergePage() {
             alt="執事アイコン"
             className="w-[100px] h-[100px] object-contain mx-auto mb-4"
           />
-          <h1 className="text-2xl font-bold text-gray-800">福岡三社詣りコンシェルジュ</h1>
+          <h1 className="text-2xl font-bold text-gray-800">福岡観光コンシェルジュ</h1>
         </div>
 
         <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-white/30 rounded-lg p-4 backdrop-blur-sm">

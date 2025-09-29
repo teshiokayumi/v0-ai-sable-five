@@ -109,9 +109,9 @@ export default function HomePage() {
 
         {/* タイトルと説明文 */}
         <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 mb-8">福岡三社参拝</h2>
+          <h2 className="text-4xl font-bold text-gray-900 mb-8">福岡観光コンシェルジュ</h2>
           <div className="space-y-4 text-gray-700 text-lg leading-relaxed max-w-3xl mx-auto">
-            <p>福岡市で神社めぐりをしながら観光地へとご案内するコンシェルジュです。</p>
+            <p>神社めぐりや観光スポットを一緒に楽しめるAIコンシェルジュです。</p>
           </div>
         </div>
 
